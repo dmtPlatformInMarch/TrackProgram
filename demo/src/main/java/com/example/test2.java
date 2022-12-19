@@ -1,78 +1,103 @@
 package com.example;
 
-import javax.sound.sampled.DataLine.Info;
-import java.util.ArrayList;
+import java.awt.*;
+import java.awt.event.*;
+import javax.swing.*;
+import javax.swing.border.LineBorder;
 
-import javax.sound.sampled.AudioFormat;
-import javax.sound.sampled.AudioSystem;
-import javax.sound.sampled.DataLine;
-import javax.sound.sampled.Line;
-import javax.sound.sampled.LineUnavailableException;
-import javax.sound.sampled.Mixer;
-import javax.sound.sampled.TargetDataLine;
+public class test2{
 
-/*
- * 마이크 변경 로직 테스트
- */
-public class test2 {
-    private static ArrayList<String> mic = new ArrayList<String>();
+      public static JFrame frame;
+      public static JPanel panel;
+      public static GridBagLayout layoutManager;
+      public static GridBagConstraints constraints;
+      public static int listNumber = 0;
 
-    private static void findMicList() throws LineUnavailableException {
-        Mixer.Info[] mixerInfos = AudioSystem.getMixerInfo();
+      private static void drawString(Graphics2D g, String text, int lineWidth, int x, int y) {
+            FontMetrics m = g.getFontMetrics();
+            if (Math.abs(m.stringWidth(text)) < lineWidth) {
+                  for (String line : text.split("\n"))
+                        g.drawString(line, x, y += g.getFontMetrics().getHeight());
+                  } else {
+                  String[] words = text.split("");
+                  String currentLine = words[0];
 
-        for (Mixer.Info info : mixerInfos) {
-            Mixer m = AudioSystem.getMixer(info);
-            Line.Info[] targetLineInfos = m.getTargetLineInfo();
-            Line.Info[] target = m.getTargetLineInfo(new Info(
-                TargetDataLine.class,
-                new AudioFormat(16000, 16, 1, true, false)
-            ));
+                  for (int i = 1; i < words.length; i++) {
+                        if (words[i].equals("\n")) {
+                              g.drawString(currentLine, x, y);
+                              y += m.getHeight();
+                              currentLine = words[i];
+                              continue;
+                        }
+                        if (Math.abs(m.stringWidth(currentLine + words[i])) < lineWidth) {
+                              currentLine += words[i];
+                        } else {
+                              g.drawString(currentLine, x, y);
+                              y += m.getHeight();
+                              currentLine = words[i];
+                        }
+                  }
 
-            for (Line.Info line:target) {
-                TargetDataLine newTarget = (TargetDataLine) AudioSystem.getLine(line);
-                if (!AudioSystem.isLineSupported(line)) {
-                    System.out.println("Microphone not supported");
-                    System.exit(0);
-                }
-                System.out.println("오디오 타겟 라인 : " + newTarget.getLineInfo());
-                System.out.println("오디오 타겟 포맷 : " + newTarget.getFormat());
-                newTarget.close();
+                  if(currentLine.trim().length() > 0) {
+                        g.drawString(currentLine, x, y);
+                  }
             }
+      }
 
-            /*for (Line.Info lineInfo:targetLineInfos) {
-                
-                if (m.isLineSupported(lineInfo) && !info.getVersion().equals("Unknown Version")) {
-                    //System.out.println("\n=========================================================================================\n오디오 믹서 : " + info.getName() + "\n-----------------------------------------------------------------------------------------\n");
-                    System.out.println("라인 마이크 정보 : " + info);
-                    //System.out.println(info.getName() + " \\ " + info.getVersion());
-                    mic.add(info.getName().replace("Port ", ""));
-                    //System.out.println("\n=========================================================================================");
-                    
-                }
-            }*/
-        }
+      private class drawPanel extends JPanel {
+            
+      }
 
-        System.out.println("검색된 마이크 : " + mic.toString());
-    }
+      public static void addGrid(GridBagLayout layout, GridBagConstraints con, Component obj, int order) {
+            System.out.println("Add " + order + " th Component!!");
+            con.gridx = 0;
+            con.gridy = order;
+            con.gridwidth = 1;
+            con.gridheight = 1;
+            con.weightx = 1;
+            con.weighty = 0;
+            layout.setConstraints(obj, con);
+            panel.add(obj);
+            listNumber++;
+            frame.revalidate();
+      }
+      public static void main(String[] args) {
+            frame = new JFrame();
+            frame.setLayout(new GridLayout(1, 2));
+            panel = new JPanel();
+            JPanel control = new JPanel();
+            JButton addButton = new JButton("추가");
 
-    public static void main(String[] args) throws Exception {
-        TargetDataLine targetDataLine;
-        AudioFormat audioFormat = new AudioFormat(44100, 16, 1, true, false);
-        DataLine.Info targetInfo =
-            new Info(
-                TargetDataLine.class,
-                audioFormat); // Set the system information to read from the microphone audio
-        // stream
+            addButton.addActionListener(new ActionListener() {
+                  @Override
+                  public void actionPerformed(ActionEvent e) {
+                        addGrid(layoutManager, constraints, new JTextArea("추가 에리어"), listNumber);
+                  }
+            });
 
-        if (!AudioSystem.isLineSupported(targetInfo)) {
-            System.out.println("Microphone not supported");
-            System.exit(0);
-        }
-        // Target data line captures the audio stream the microphone produces.
-        targetDataLine = (TargetDataLine) AudioSystem.getLine(targetInfo);
-        System.out.println("타켓 마이크 정보 : " + targetDataLine.getLineInfo());
-        System.out.println("타켓 마이크 포맷 : " + targetDataLine.getFormat());
+            control.add(addButton);
+      
+            layoutManager = new GridBagLayout();
+            constraints = new GridBagConstraints();
+            constraints.fill = GridBagConstraints.BOTH;
+            panel.setLayout(layoutManager);
 
-        findMicList();
-    }
+            JTextArea content1 = new JTextArea("텍스트 에리어");
+            JTextArea content2 = new JTextArea("텍스트 에리어");
+            JTextArea content3 = new JTextArea("텍스트 에리어");
+
+            addGrid(layoutManager, constraints, content1, listNumber);
+            addGrid(layoutManager, constraints, content2, listNumber);
+            addGrid(layoutManager, constraints, content3, listNumber);
+
+            frame.add(panel);
+            frame.add(control);
+            frame.pack();
+            frame.setVisible(true);
+            frame.setSize(1920, 1080);
+            frame.setResizable(false);
+            frame.setLocationRelativeTo(null);
+            frame.setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
+      }
 }
+
