@@ -8,11 +8,17 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 
 public class InfiniteStreamRecognizeOptions {
-    public String langCode = "ko-KR"; // by default english US
+    public String langCode = "ko-KR"; // by default korean KR
+    public String outlangCode = "en-US"; // by default english US
 
     public void setLanguageCode(String langCode) {
       System.out.println("언어 코드 설정 : " + langCode);
       this.langCode = langCode;
+    }
+
+    public void setOutLanguageCode(String langCode) {
+      System.out.println("외부 언어 코드 설정 : " + langCode);
+      this.outlangCode = langCode;
     }
   
     /** Construct an InfiniteStreamRecognizeOptions class from command line flags. */

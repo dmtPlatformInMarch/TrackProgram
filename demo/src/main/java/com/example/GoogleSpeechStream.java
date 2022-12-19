@@ -15,6 +15,7 @@ import com.google.protobuf.Duration;
 
 import net.sf.json.JSONObject;
 
+import java.awt.*;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.concurrent.BlockingQueue;
@@ -36,34 +37,55 @@ public class GoogleSpeechStream implements Runnable {
   public Boolean isMicSupported = false;
 
   // Creating shared object
-  private static volatile BlockingQueue<byte[]> sharedQueue = new LinkedBlockingQueue();
-  private static TargetDataLine targetDataLine;
-  private static int BYTES_PER_BUFFER = 6400; // buffer size in bytes
+  private volatile BlockingQueue<byte[]> sharedQueue = new LinkedBlockingQueue();
+  private TargetDataLine targetDataLine;
+  private AudioFormat audioFormat;
+  private DataLine.Info targetInfo;
 
-  private static int restartCounter = 0;
-  private static ArrayList<ByteString> audioInput = new ArrayList<ByteString>();
-  private static ArrayList<ByteString> lastAudioInput = new ArrayList<ByteString>();
-  private static int resultEndTimeInMS = 0;
-  private static int isFinalEndTime = 0;
-  private static int finalRequestEndTime = 0;
-  private static boolean newStream = true;
-  private static double bridgingOffset = 0;
-  private static boolean lastTranscriptWasFinal = false;
-  private static StreamController referenceToStreamController;
-  private static ByteString tempByteString;
+  private int BYTES_PER_BUFFER = 6400; // buffer size in bytes
 
+  private int restartCounter = 0;
+  private ArrayList<ByteString> audioInput = new ArrayList<ByteString>();
+  private ArrayList<ByteString> lastAudioInput = new ArrayList<ByteString>();
+  private int resultEndTimeInMS = 0;
+  private int isFinalEndTime = 0;
+  private int finalRequestEndTime = 0;
+  private boolean newStream = true;
+  private double bridgingOffset = 0;
+  private boolean lastTranscriptWasFinal = false;
+  private StreamController referenceToStreamController;
+  private ByteString tempByteString;
+
+  private String direction = "none"; // none, left, right;
   private String languageCode;
-  private static String[] dmtLanguageCode = {"ko", "en", "zh-CN", "ja", "de", "fr", "es", "pt", "it", "ru", "vi"};
-  private static String dmtFromLang = dmtLanguageCode[0];
-  private static String dmtToLang = dmtLanguageCode[1];
+  private String[] dmtLanguageCode = {"ko", "en", "zh-CN", "ja", "de", "fr", "es", "pt", "it", "ru", "vi"};
+  private String dmtFromLang = dmtLanguageCode[0];
+  private String dmtToLang = dmtLanguageCode[1];
 
   private TrackFrame trackView;
 
-  private static Thread micThread;
+  private Thread micThread;
 
   public GoogleSpeechStream(String languageCode, TrackFrame trackView) {
     this.languageCode = languageCode;
     this.trackView = trackView;
+    this.direction = "none";
+  }
+
+  public GoogleSpeechStream(String languageCode, TrackFrame trackView, String dir) {
+    this.languageCode = languageCode;
+    this.trackView = trackView;
+    this.direction = dir;
+  }
+
+  public void setLanguageCode(String languageCode) {
+    this.languageCode = languageCode;
+  }
+
+  public void setMicSetting(TargetDataLine line, AudioFormat format) {
+    this.targetDataLine = line;
+    this.audioFormat = format;
+    this.targetInfo = new Info(TargetDataLine.class, audioFormat);
   }
 
   public void setInputLanguage(String langCode) {
@@ -150,12 +172,11 @@ public class GoogleSpeechStream implements Runnable {
 
   // 무한 스트리밍 인식 함수
   /** Performs infinite streaming speech recognition */
-  public static void infiniteStreamingRecognize(String languageCode, final TrackFrame trackView) throws Exception {
+  public void infiniteStreamingRecognize(String languageCode, final TrackFrame trackView) throws Exception {
     System.out.println("설정된 언어 코드 : " + languageCode);
     // 마이크 입력을 sharedQueue에 쌓음.
     // Microphone Input buffering
     class MicBuffer implements Runnable {
-
       @Override
       public void run() {
         System.out.println(YELLOW);
@@ -212,12 +233,26 @@ public class GoogleSpeechStream implements Runnable {
             req.put("from", dmtFromLang);
             req.put("to", dmtToLang);
             req.put("text", alternative.getTranscript());
-            try {
-              trackView.leftText = trackView.leftText + alternative.getTranscript() + "\n\n";
-              trackView.rightText = trackView.rightText + httpsTranslator.translateRequest(req) + "\n";
-              trackView.leftTextArea.setText(trackView.leftText);
-              trackView.rightTrackPanel.addText(trackView.rightText);
-              trackView.scrollPanel.getVerticalScrollBar().setValue(trackView.scrollPanel.getVerticalScrollBar().getMaximum());
+            try { // 입력 종료 시 출력
+              // 기본 or 왼쪽 페이지 설정
+              if (direction == "none" || direction == "left") {
+                trackView.leftTextArea.setForeground(Color.WHITE);
+                trackView.rightTrackPanel.setColor(Color.WHITE);
+                trackView.leftText = trackView.leftText + alternative.getTranscript() + "\n\n";
+                trackView.rightText = trackView.rightText + httpsTranslator.translateRequest(req) + "\n";
+                trackView.leftTextArea.setText(trackView.leftText);
+                trackView.rightTrackPanel.addText(trackView.rightText);
+              // 오른쪽 페이지 설정
+              } else {
+                trackView.leftTextArea.setForeground(Color.WHITE);
+                trackView.rightTrackPanel.setColor(Color.WHITE);
+                trackView.rightText = trackView.rightText + alternative.getTranscript() + "\n\n";
+                trackView.leftText = trackView.leftText + httpsTranslator.translateRequest(req) + "\n";
+                trackView.leftTextArea.setText(trackView.leftText);
+                trackView.rightTrackPanel.addText(trackView.rightText);
+              }
+              
+              //trackView.scrollPanel.getVerticalScrollBar().setValue(trackView.scrollPanel.getVerticalScrollBar().getMaximum());
             } catch (Exception e) {
               e.printStackTrace();
             }
@@ -229,6 +264,15 @@ public class GoogleSpeechStream implements Runnable {
             // 지우기
             System.out.print("\033[2K\r");
             System.out.printf("%s: %s", convertMillisToDate(correctedTime), alternative.getTranscript());
+            // 기본 or 왼쪽 페이지 설정
+            if (direction == "none" || direction == "left") {
+              trackView.leftTextArea.setForeground(Color.BLUE);
+              trackView.leftTextArea.setText(trackView.leftText + alternative.getTranscript());
+            // 오른쪽 페이지 설정
+            } else {
+              trackView.rightTrackPanel.setColor(Color.BLUE);
+              trackView.rightTrackPanel.addText(trackView.rightText + alternative.getTranscript());
+            }
 
             lastTranscriptWasFinal = false;
           }
@@ -268,19 +312,21 @@ public class GoogleSpeechStream implements Runnable {
         
         // SampleRate : 44100Hz, SampleSizeInBits: 16, Number of channels: 1, Signed: true,
         // bigEndian: false
-        AudioFormat audioFormat = new AudioFormat(44100, 16, 1, true, false);
-        DataLine.Info targetInfo =
-            new Info(
-                TargetDataLine.class,
-                audioFormat); // Set the system information to read from the microphone audio
-        // stream
+        if (this.audioFormat == null) {
+          System.out.println("오디오 포맷 미설정... 자동 설정...");
+          audioFormat = new AudioFormat(44100, 16, 1, true, false);
+          targetInfo = new Info(TargetDataLine.class, audioFormat); // stream
+        }
 
         if (!AudioSystem.isLineSupported(targetInfo)) {
           System.out.println("Microphone not supported");
           System.exit(0);
         }
         // Target data line captures the audio stream the microphone produces.
-        targetDataLine = (TargetDataLine) AudioSystem.getLine(targetInfo);
+        if (this.targetDataLine == null) {
+          System.out.println("마이크 미설정... 자동 설정...");
+          targetDataLine = (TargetDataLine) AudioSystem.getLine(targetInfo);
+        }
         targetDataLine.open(audioFormat);
         micThread.start();
 
@@ -359,6 +405,7 @@ public class GoogleSpeechStream implements Runnable {
             }
 
             tempByteString = ByteString.copyFrom(sharedQueue.take());
+            //System.out.println(tempByteString);
 
             request =
                 StreamingRecognizeRequest.newBuilder().setAudioContent(tempByteString).build();
@@ -369,7 +416,7 @@ public class GoogleSpeechStream implements Runnable {
           clientStream.send(request);
         }
       } catch (Exception e) {
-        System.out.println("Error : " + e);
+        System.out.println("음성 인식 파트 에러 : " + e);
         return;
       }
     }

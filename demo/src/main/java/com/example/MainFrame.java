@@ -10,22 +10,32 @@ import java.util.ArrayList;
 import java.util.Arrays;
 
 import javax.sound.sampled.*;
+import javax.sound.sampled.DataLine.Info;
 import javax.swing.*;
 
 public class MainFrame extends JFrame {
 
-    JComboBox<String> outLangSelector;
-    JComboBox<String> inLangSelector;
+    private JComboBox<String> outLangSelector;
+    private JComboBox<String> inLangSelector;
 
-    TrackFrame track;
-    Thread recordingVoice;
-    ByteArrayOutputStream outStream = new ByteArrayOutputStream();
-    InfiniteStreamRecognizeOptions option;
-    GoogleSpeechStream googleSpeechStream;
+    private TrackFrame track;
+    //private Thread recordingVoice;
+    private Thread mainUserVoice, subUserVoice;
+    private ByteArrayOutputStream outStream = new ByteArrayOutputStream();
+    private InfiniteStreamRecognizeOptions option;
+    //private GoogleSpeechStream googleSpeechStream;
+    private GoogleSpeechStream mainUserSpeechStream, subUserSpeechStream;
     
+    private ArrayList<String> mic = new ArrayList<String>();
+    private ArrayList<Mixer> micMixer = new ArrayList<Mixer>();
+    private AudioFormat audioFormat = new AudioFormat(44100, 16, 1, true, false);
+    private DataLine.Info targetLineInfo = new Info(TargetDataLine.class, audioFormat);
+    private TargetDataLine mainMic;
+    private TargetDataLine subMic;
+
     private String[] googleLanguageCode = {"ko-KR", "en-US", "zh", "ja-JP", "de-DE", "fr-FR", "es-ES", "pt-PT", "it-IT", "ru-RU", "vi-VN"};
-    final private String[] language = { "한국어", "영어", "중국어", "일본어", "독일어", "프랑스어" };
-    final private String[] inLanguage = language;
+    private String[] language = { "한국어", "영어", "중국어", "일본어", "독일어", "프랑스어" };
+    private String[] inLanguage = language;
     private String[] outLanguage = {};
 
     public MainFrame () {
@@ -51,31 +61,35 @@ public class MainFrame extends JFrame {
     };
 
     // 마이크 검색 함수
-    final private ArrayList<String> findMicList () {
+    private void findMicList () throws LineUnavailableException {
+        mainMic = (TargetDataLine) AudioSystem.getLine(targetLineInfo);
         Mixer.Info[] mixerInfos = AudioSystem.getMixerInfo();
-        ArrayList<String> mic = new ArrayList<String>();
 
         for (Mixer.Info info : mixerInfos) {
             Mixer m = AudioSystem.getMixer(info);
             Line.Info[] targetLineInfos = m.getTargetLineInfo();
 
-            for (Line.Info lineInfo:targetLineInfos) {
-                if (m.isLineSupported(lineInfo) && !info.getVersion().equals("Unknown Version")) {
+            for (Line.Info targetInfo:targetLineInfos) {
+                if (m.isLineSupported(targetInfo) && targetInfo.matches(mainMic.getLineInfo())) {
                     System.out.println("\n=========================================================================================\n오디오 믹서 : " + info.getName() + "\n-----------------------------------------------------------------------------------------\n");
                     System.out.println(info.getName() + " \\ " + info.getVersion());
-                    mic.add(info.getName().replace("Port ", ""));
+                    mic.add(m.getMixerInfo().getName().replace("Port ", ""));
+                    micMixer.add(m);
                     System.out.println("\n=========================================================================================");
                 }
             }
         }
 
         System.out.println("검색된 마이크 : " + mic.toString());
-        return mic;
     }
     
     public void initialize() {
         try {
-            googleSpeechStream = new GoogleSpeechStream(option.langCode, track);
+            findMicList();
+
+            //googleSpeechStream = new GoogleSpeechStream(option.langCode, track);
+            mainUserSpeechStream = new GoogleSpeechStream(option.langCode, track, "left");
+            subUserSpeechStream = new GoogleSpeechStream(option.langCode, track, "right");
 
             JPanel mainPanel = new JPanel();
             mainPanel.setLayout(new GridLayout(2, 1));
@@ -96,20 +110,66 @@ public class MainFrame extends JFrame {
             setting.setSize(600, 300);
             setting.setBackground(Color.WHITE);
 
-            JPanel micGroup = new JPanel();
-            micGroup.setLayout(new GridBagLayout());
-            micGroup.setBackground(Color.WHITE);
-            JLabel micTitle = new JLabel("마이크");
-            micTitle.setFont(mainFont);
-            JComboBox<String> micSelector = new JComboBox(findMicList().toArray());
+            JPanel mainMicGroup = new JPanel();
+            JPanel subMicGroup = new JPanel();
+            mainMicGroup.setLayout(new GridBagLayout());
+            mainMicGroup.setBackground(Color.WHITE);
+            subMicGroup.setLayout(new GridBagLayout());
+            subMicGroup.setBackground(Color.WHITE);
+            JLabel mainMicTitle = new JLabel("메인 마이크");
+            JLabel subMicTitle = new JLabel("서브 마이크");
+            mainMicTitle.setFont(mainFont);
+            subMicTitle.setFont(mainFont);
+            JComboBox<String> mainMicSelector = new JComboBox(mic.toArray());
+            JComboBox<String> subMicSelector = new JComboBox(mic.toArray());
+
+            // mainUser 마이크 선택 이벤트
+            ActionListener mainMicSelect = new ActionListener() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    JComboBox cb = (JComboBox) e.getSource();
+                    String selectMic = cb.getSelectedItem().toString();
+                    try {
+                        System.out.println("검색한 마이크 믹서 : " + micMixer.get(mic.indexOf(selectMic)).isLineSupported(targetLineInfo));
+                        mainMic = (TargetDataLine) (micMixer.get(mic.indexOf(cb.getSelectedItem().toString())).getLine(targetLineInfo));
+                        
+                    } catch (LineUnavailableException ex) {
+                        System.out.println("해당 Line 사용 불가능 : " + cb.getSelectedItem().toString());
+                        //ex.printStackTrace();
+                    }
+                }
+            };
+
+            // subUser 마이크 선택 이벤트
+            ActionListener subMicSelect = new ActionListener() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    JComboBox cb = (JComboBox) e.getSource();
+                    String selectMic = cb.getSelectedItem().toString();
+                    try {
+                        subMic = (TargetDataLine) micMixer.get(mic.indexOf(selectMic)).getLine(targetLineInfo);
+                    } catch (LineUnavailableException ex) {
+                        System.out.println("해당 Line 사용 불가능 : " + cb.getSelectedItem().toString());
+                        ex.printStackTrace();
+                    }
+                }
+            };
+
+            mainMicSelector.addActionListener(mainMicSelect);
+            subMicSelector.addActionListener(subMicSelect);
             
             con.fill = GridBagConstraints.NONE;
             con.anchor = GridBagConstraints.WEST;
             con.weightx = 0.3;
-            micGroup.add(micTitle, con);
+            mainMicGroup.add(mainMicTitle, con);
             con.weightx = 0.7;
             con.fill = GridBagConstraints.HORIZONTAL;
-            micGroup.add(micSelector, con);
+            mainMicGroup.add(mainMicSelector, con);
+            con.weightx = 0.3;
+            subMicGroup.add(subMicTitle, con);
+            con.weightx = 0.7;
+            con.fill = GridBagConstraints.HORIZONTAL;
+            subMicGroup.add(subMicSelector, con);
 
             JPanel inLangGroup = new JPanel();
             inLangGroup.setLayout(new GridBagLayout());
@@ -136,31 +196,78 @@ public class MainFrame extends JFrame {
             outLanguage = outList.toArray(new String[0]);
             outLangSelector = new JComboBox<String>(outLanguage);
 
+            // 초기 언어 설정
+            mainUserSpeechStream.setLanguageCode(googleLanguageCode[Arrays.asList(language).indexOf(inLangSelector.getSelectedItem().toString())]);
+            mainUserSpeechStream.setInputLanguage(inLangSelector.getSelectedItem().toString());
+            mainUserSpeechStream.setOutputLanguage(outLangSelector.getSelectedItem().toString());
+            subUserSpeechStream.setLanguageCode(googleLanguageCode[Arrays.asList(language).indexOf(outLangSelector.getSelectedItem().toString())]);
+            subUserSpeechStream.setInputLanguage(outLangSelector.getSelectedItem().toString());
+            subUserSpeechStream.setOutputLanguage(inLangSelector.getSelectedItem().toString());
+
+            // inLanguage 선택 이벤트
             ActionListener inLangSelect = new ActionListener() {
                 @Override
                 public void actionPerformed(ActionEvent e) {
                     JComboBox cb = (JComboBox) e.getSource();
+
+                    // inLanguage를 선택했다면, 선택한 요소를 제외한 outLanguage를 만들어야 함.
                     List<String> outList = new ArrayList<>(Arrays.asList(language));
                     outList.remove(cb.getSelectedItem().toString());
                     outLanguage = outList.toArray(new String[0]);
                     DefaultComboBoxModel<String> model = new DefaultComboBoxModel<>(outLanguage);
                     outLangSelector.setModel(model);
+
+                    // 옵션의 언어 설정 변경
                     option.setLanguageCode(googleLanguageCode[cb.getSelectedIndex()]);
-                    googleSpeechStream = new GoogleSpeechStream(option.langCode, track);
-                    googleSpeechStream.setInputLanguage(cb.getSelectedItem().toString());
-                    System.out.println("Select Input Lang : " + cb.getSelectedItem().toString());
+
+                    // 음성 인식기의 언어 설정 변경
+                    mainUserSpeechStream.setLanguageCode(option.langCode);
+                    //googleSpeechStream.setLanguageCode(option.langCode);
+
+                    // 음성 인식기에서 번역 언어 설정 변경 (Input)
+                    mainUserSpeechStream.setInputLanguage(cb.getSelectedItem().toString());
+                    subUserSpeechStream.setOutputLanguage(cb.getSelectedItem().toString());
+                    //googleSpeechStream.setInputLanguage(cb.getSelectedItem().toString());
+                    //System.out.println("Select Input Lang : " + cb.getSelectedItem().toString());
                     
-                    googleSpeechStream.setOutputLanguage(outLangSelector.getSelectedItem().toString());
-                    System.out.println("Select Output Lang : " + outLangSelector.getSelectedItem().toString());
+                    // 음성 인식기에서 번역 언어 설정 변경 (Output)
+                    mainUserSpeechStream.setOutputLanguage(outLangSelector.getSelectedItem().toString());
+                    subUserSpeechStream.setInputLanguage(outLangSelector.getSelectedItem().toString());
+
+                    //googleSpeechStream.setOutputLanguage(outLangSelector.getSelectedItem().toString());
+                    //System.out.println("Select Output Lang : " + outLangSelector.getSelectedItem().toString());
                 }
             };
 
+            // outLanguage 선택 이벤트
             ActionListener outLangSelect = new ActionListener() {
                 @Override
                 public void actionPerformed(ActionEvent e) {
                     JComboBox cb = (JComboBox) e.getSource();
-                    googleSpeechStream.setOutputLanguage(cb.getSelectedItem().toString());
-                    System.out.println("Select Output Lang : " + outLangSelector.getSelectedItem().toString());
+
+                    // outLanguage를 선택했다면, 선택한 요소를 제외한 inLanguage를 만들어야 함.
+                    List<String> inList = new ArrayList<>(Arrays.asList(language));
+                    inList.remove(cb.getSelectedItem().toString());
+                    inLanguage = inList.toArray(new String[0]);
+                    DefaultComboBoxModel<String> model = new DefaultComboBoxModel<>(inLanguage);
+                    inLangSelector.setModel(model);
+
+                    // 옵션의 언어 설정 변경
+                    option.setOutLanguageCode(googleLanguageCode[cb.getSelectedIndex()]);
+
+                    // 음성 인식기의 언어 설정 변경
+                    subUserSpeechStream.setLanguageCode(option.outlangCode);
+
+                    // 음성 인식기에서 번역 언어 설정 변경 (Input)
+                    subUserSpeechStream.setInputLanguage(cb.getSelectedItem().toString());
+                    mainUserSpeechStream.setOutputLanguage(cb.getSelectedItem().toString());
+
+                    // 음성 인식기에서 번역 언어 설정 변경 (Output)
+                    subUserSpeechStream.setOutputLanguage(inLangSelector.getSelectedItem().toString());
+                    mainUserSpeechStream.setInputLanguage(inLangSelector.getSelectedItem().toString());
+                    
+                    //googleSpeechStream.setOutputLanguage(cb.getSelectedItem().toString());
+                    //System.out.println("Select Output Lang : " + outLangSelector.getSelectedItem().toString());
                 }
             };
 
@@ -185,9 +292,12 @@ public class MainFrame extends JFrame {
             recordingStop.setBorder(BorderFactory.createEmptyBorder(25, 50, 25, 50));
             recordingStop.setEnabled(false);
 
+            // 마이크 오픈 이벤트
             ActionListener startRecording = new ActionListener() {
                 @Override
                 public void actionPerformed(ActionEvent e) {
+                    mainUserSpeechStream.setMicSetting(mainMic, audioFormat);
+                    subUserSpeechStream.setMicSetting(subMic, audioFormat);
                     try {
                         outStream.flush();
                     } catch (IOException e1) {
@@ -204,17 +314,27 @@ public class MainFrame extends JFrame {
                         System.exit(1);
                     }
 
-                    recordingVoice = new Thread(googleSpeechStream);
-                    recordingVoice.start();
+                    mainUserVoice = new Thread(mainUserSpeechStream);
+                    subUserVoice = new Thread(subUserSpeechStream);
+                    //recordingVoice = new Thread(googleSpeechStream);
+                    //recordingVoice.start();
+                    mainUserVoice.start();
+                    subUserVoice.start();
                 }
             };
 
+            // 마이크 클로즈 이벤트
             ActionListener stopRecording = new ActionListener() {
                 @Override
                 public void actionPerformed(ActionEvent e) {
                     System.out.println("Recording Stop !!!");
-                    recordingVoice.interrupt();
-                    googleSpeechStream.cleanMic();
+                    mainUserVoice.interrupt();
+                    subUserVoice.interrupt();
+                    //recordingVoice.interrupt();
+
+                    mainUserSpeechStream.cleanMic();
+                    subUserSpeechStream.cleanMic();
+                    //googleSpeechStream.cleanMic();
 
                     recordingStart.setEnabled(true);
                     recordingStop.setEnabled(false);
@@ -227,7 +347,8 @@ public class MainFrame extends JFrame {
             actionGroup.add(recordingStart);
             actionGroup.add(recordingStop);
 
-            setting.add(micGroup);
+            setting.add(mainMicGroup);
+            setting.add(subMicGroup);
             setting.add(inLangGroup);
             setting.add(outLangGroup);
 
