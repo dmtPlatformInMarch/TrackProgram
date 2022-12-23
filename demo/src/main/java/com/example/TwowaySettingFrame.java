@@ -140,7 +140,7 @@ public class TwowaySettingFrame extends JFrame {
                     JComboBox cb = (JComboBox) e.getSource();
                     String selectMic = cb.getSelectedItem().toString();
                     try {
-                        mainMic = (TargetDataLine) (micMixer.get(mic.indexOf(cb.getSelectedItem().toString())).getLine(targetLineInfo));
+                        mainMic = (TargetDataLine) (micMixer.get(mic.indexOf(selectMic)).getLine(targetLineInfo));
                         
                     } catch (LineUnavailableException ex) {
                         System.out.println("해당 Line 사용 불가능 : " + cb.getSelectedItem().toString());
@@ -185,7 +185,7 @@ public class TwowaySettingFrame extends JFrame {
             inLangGroup.setBackground(Color.WHITE);
             JLabel inLang = new JLabel("입력 언어");
             inLang.setFont(mainFont);
-            inLangSelector = new JComboBox(languageKey);
+            inLangSelector = new JComboBox<String>(languageKey);
 
             con.fill = GridBagConstraints.NONE;
             con.anchor = GridBagConstraints.WEST;

@@ -37,7 +37,7 @@ public class OnewayStream implements Runnable {
   public Boolean isMicSupported = false;
 
   // Creating shared object
-  private volatile BlockingQueue<byte[]> sharedQueue = new LinkedBlockingQueue();
+  private volatile BlockingQueue<byte[]> sharedQueue = new LinkedBlockingQueue<byte[]>();
   private TargetDataLine targetDataLine;
   private AudioFormat audioFormat;
   private DataLine.Info targetInfo;
