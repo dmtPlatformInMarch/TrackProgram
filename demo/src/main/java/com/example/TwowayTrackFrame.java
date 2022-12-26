@@ -16,7 +16,7 @@ public class TwowayTrackFrame extends JFrame {
         public JTextArea leftTextArea = new JTextArea(), rightTextArea = new JTextArea();
         public String rightText = "";
 
-        private static void drawString(Graphics2D g, String text, int lineWidth, int x, int y) {
+        private void drawString(Graphics2D g, String text, int lineWidth, int x, int y) {
             FontMetrics m = g.getFontMetrics();
             if (Math.abs(m.stringWidth(text)) < lineWidth) {
                 for (String line : text.split("\n"))
@@ -45,6 +45,10 @@ public class TwowayTrackFrame extends JFrame {
                     g.drawString(currentLine, x, y);
                 }
             }
+
+            /*panel.setPreferredSize(new Dimension((int) screenSize.getWidth() / 2, y + fontSize / 2));
+            panel.revalidate();
+            panel.repaint();*/
         }
 
         class ReversePanel extends JPanel {
